@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>3D Car Racing Game | Three.js</title>
+
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      background: #111;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #ui {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      color: white;
+      z-index: 10;
+      font-size: 20px;
+      background: rgba(0,0,0,0.5);
+      padding: 10px 20px;
+      border-radius: 10px;
+    }
+
+    #startScreen {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(#111, #222);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      color: white;
+      z-index: 20;
+    }
+
+    button {
+      padding: 12px 25px;
+      font-size: 18px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      background: #ff3c00;
+      color: white;
+      margin-top: 20px;
+    }
+
+    button:hover {
+      background: #ff5e2b;
+    }
+  </style>
+</head>
+<body>
+
+<div id="ui">
+  Score: <span id="score">0</span>
+</div>
+
+<div id="startScreen">
+  <h1>🏎️ 3D Car Racing Game</h1>
+  <p>Use Arrow Keys to Move</p>
+  <button onclick="startGame()">Start Game</button>
+</div>
+
+<script type="module">
+
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+let scene, camera, renderer;
+let playerCar;
+let enemyCars = [];
+let roadLines = [];
+let keys = {};
+let score = 0;
+let gameStarted = false;
+
+init();
+
+function init() {
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87ceeb);
+
+  camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  );
+
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  // LIGHTS
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+  scene.add(ambientLight);
+
+  const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+  dirLight.position.set(5, 10, 7);
+  scene.add(dirLight);
+
+  // ROAD
+  const roadGeometry = new THREE.PlaneGeometry(20, 200);
+  const roadMaterial = new THREE.MeshStandardMaterial({
+    color: 0x333333
+  });
+
+  const road = new THREE.Mesh(roadGeometry, roadMaterial);
+  road.rotation.x = -Math.PI / 2;
+  road.position.z = -50;
+  scene.add(road);
+
+  // ROAD LINES
+  for (let i = 0; i < 20; i++) {
+    const lineGeo = new THREE.BoxGeometry(0.5, 0.1, 4);
+    const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+    const line = new THREE.Mesh(lineGeo, lineMat);
+    line.position.set(0, 0.05, -i * 10);
+
+    scene.add(line);
+    roadLines.push(line);
+  }
+
+  // PLAYER CAR
+  playerCar = createCar(0xff0000);
+  playerCar.position.set(0, 0.5, 5);
+  scene.add(playerCar);
+
+  // ENEMY CARS
+  for (let i = 0; i < 5; i++) {
+    const enemy = createCar(0x00ff00);
+
+    enemy.position.set(
+      (Math.random() - 0.5) * 12,
+      0.5,
+      -Math.random() * 100
+    );
+
+    scene.add(enemy);
+    enemyCars.push(enemy);
+  }
+
+  // CAMERA POSITION
+  camera.position.set(0, 6, 12);
+  camera.lookAt(playerCar.position);
+
+  // EVENTS
+  window.addEventListener('keydown', (e) => {
+    keys[e.key] = true;
+  });
+
+  window.addEventListener('keyup', (e) => {
+    keys[e.key] = false;
+  });
+
+  window.addEventListener('resize', onResize);
+}
+
+function createCar(color) {
+
+  const car = new THREE.Group();
+
+  // BODY
+  const bodyGeo = new THREE.BoxGeometry(2, 1, 4);
+  const bodyMat = new THREE.MeshStandardMaterial({ color });
+
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.position.y = 0.5;
+  car.add(body);
+
+  // TOP
+  const topGeo = new THREE.BoxGeometry(1.5, 0.8, 2);
+  const topMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+
+  const top = new THREE.Mesh(topGeo, topMat);
+  top.position.set(0, 1.2, -0.2);
+
+  car.add(top);
+
+  // WHEELS
+  for (let x of [-1, 1]) {
+    for (let z of [-1.5, 1.5]) {
+
+      const wheelGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.5, 16);
+      const wheelMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
+
+      const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.set(x, 0.2, z);
+
+      car.add(wheel);
+    }
+  }
+
+  return car;
+}
+
+function startGame() {
+  document.getElementById('startScreen').style.display = 'none';
+  gameStarted = true;
+  animate();
+}
+
+function animate() {
+
+  requestAnimationFrame(animate);
+
+  if (!gameStarted) return;
+
+  // PLAYER MOVEMENT
+  if (keys['ArrowLeft']) {
+    playerCar.position.x -= 0.2;
+  }
+
+  if (keys['ArrowRight']) {
+    playerCar.position.x += 0.2;
+  }
+
+  // LIMITS
+  playerCar.position.x = Math.max(-8, Math.min(8, playerCar.position.x));
+
+  // ROAD MOVEMENT
+  roadLines.forEach(line => {
+    line.position.z += 1;
+
+    if (line.position.z > 10) {
+      line.position.z = -190;
+    }
+  });
+
+  // ENEMY CARS
+  enemyCars.forEach(enemy => {
+
+    enemy.position.z += 0.8;
+
+    if (enemy.position.z > 10) {
+
+      enemy.position.z = -100;
+
+      enemy.position.x = (Math.random() - 0.5) * 12;
+
+      score++;
+      document.getElementById('score').innerText = score;
+    }
+
+    // COLLISION
+    if (
+      Math.abs(enemy.position.z - playerCar.position.z) < 3 &&
+      Math.abs(enemy.position.x - playerCar.position.x) < 2
+    ) {
+
+      alert("💥 Game Over!\nScore: " + score);
+      location.reload();
+    }
+  });
+
+  // CAMERA FOLLOW
+  camera.position.x = playerCar.position.x;
+
+  renderer.render(scene, camera);
+}
+
+function onResize() {
+
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+</script>
+
+</body>
+</html>
